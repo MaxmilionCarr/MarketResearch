@@ -1,0 +1,1 @@
+1.) Could make get_create use get_info and create functions rather than redoing everything. This change is reflected in equitiesrepo
