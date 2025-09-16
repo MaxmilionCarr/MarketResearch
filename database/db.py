@@ -2,6 +2,7 @@ from __future__ import annotations
 import sqlite3 as sql
 from core.exchanges import ExchangeRepository
 from core.markets import MarketRepository
+import os
 
 class DataBase:
     def __init__(self, db_path='marketdata.db'):
