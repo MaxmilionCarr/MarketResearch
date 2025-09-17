@@ -1,48 +1,44 @@
-from ib_insync import *
-import pandas as pd
-import json
+from database.core import exchanges, markets
+from database.instruments import tickers
+from database.technical_data import historical_prices
 import sqlite3 as sql
-import database as db
 
-DB_PATH = 'marketdata.db'
+from ib_insync import *
 
-def save_historical(symbol, exchange, bars, market="equities", currency="USD", description=""):
-    con = sql.connect(DB_PATH)
-    con.execute("PRAGMA foreign_keys = ON;")
-    cur = con.cursor()
+import time
 
-    ticker_id = db.get_or_create_ticker(cur, symbol, exchange, market, currency, description)
-
-    for bar in bars:
-        cur.execute('''INSERT OR REPLACE INTO historical_prices
-                       (ticker_id, datetime, open, high, low, close, volume)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                    (ticker_id,
-                     str(bar.date),   # bar.date is datetime or string
-                     bar.open, bar.high, bar.low, bar.close, bar.volume))
-
-    con.commit()
-    con.close()
-    print(f"✅ Saved {len(bars)} bars for {symbol}")
-
-def fetch_and_save(symbol="SPY", exchange="SMART"):
+def test_connection():
     ib = IB()
-    ib.connect("127.0.0.1", 7497, clientId=1)
+    try:
+        ib.connect("127.0.0.1", 7497, clientId=1)
+    except Exception as e:
+        print(f"❌ Connection failed: {e}")
+        return False
+    else:
+        print("✅ Connection successful")
+        return ib
 
-    contract = Stock(symbol, exchange, "USD")
-    bars = ib.reqHistoricalData(
-        contract,
-        endDateTime="",
-        durationStr="1 Y",
-        barSizeSetting="1 day",
-        whatToShow="TRADES",
-        useRTH=True,
-        formatDate=1
-    )
-
-    ib.disconnect()
-    save_historical(symbol, exchange, bars, market="equities", currency="USD", description="S&P 500 ETF")
-
-# Run test
 if __name__ == "__main__":
-    fetch_and_save("SPY", "SMART")
+    '''
+    retry = 0
+    while retry < 5:
+        if ib := test_connection():
+            break
+        retry += 1
+        print(f"Retrying... ({retry}/5)")
+        time.sleep(2)
+    '''
+
+    ''' 
+    sql_connection = sql.connect('database/marketdata.db')
+    exch_repo = exchanges.ExchangeRepository(sql_connection)
+    exch_repo.create("NYSE", "America/New_York")
+    exch_repo.create("NASDAQ", "America/New_York")
+    exch_repo.delete(exchange_id=2)
+
+    exid = exch_repo.get_or_create("NYSE")
+    info = exch_repo.get_info(exid)
+    print(info)
+
+    print(exch_repo.get_all())
+    '''

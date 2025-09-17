@@ -1,5 +1,5 @@
-import sqlite3 as sql
 from __future__ import annotations
+import sqlite3 as sql
 from typing import Optional, List, Tuple, Any
 
 # This is the primary table for all instruments

@@ -22,20 +22,21 @@ class DataBase:
     def create_db(self):
         
         con = self.connection
-        con.execute("PRAGMA foreign_keys = ON")
         cur = con.cursor()
 
         # --- Core Reference Tables ---
         cur.execute('''CREATE TABLE IF NOT EXISTS exchanges (
                         exchange_id INTEGER PRIMARY KEY,
-                        exchange_name TEXT NOT NULL,
+                        exchange_name TEXT NOT NULL UNIQUE,
                         timezone TEXT NOT NULL
                     )''')
+        cur.execute('''CREATE INDEX IF NOT EXISTS idx_exchanges_name ON exchanges (exchange_name)''')
 
         cur.execute('''CREATE TABLE IF NOT EXISTS markets (
                         market_id INTEGER PRIMARY KEY,
                         market_name TEXT NOT NULL
                     )''')
+        cur.execute('''CREATE INDEX IF NOT EXISTS idx_markets_name ON markets (market_name)''')
         
         cur.execute('''CREATE TABLE IF NOT EXISTS tickers (
                         ticker_id INTEGER PRIMARY KEY,
@@ -84,8 +85,9 @@ class DataBase:
                         low REAL,
                         close REAL NOT NULL,
                         volume INTEGER,
-                        PRIMARY KEY (ticker_id, datetime),
+                        PRIMARY KEY (ticker_id, datetime)
                     )''')
+        
         cur.execute('''CREATE INDEX IF NOT EXISTS idx_prices_ticker_time ON historical_prices (ticker_id, datetime)''')
         
         cur.execute('''CREATE TABLE IF NOT EXISTS option_chains (
@@ -107,7 +109,7 @@ class DataBase:
                         last_price REAL NOT NULL,
                         volume INTEGER,
                         open_interest INTEGER,
-                        PRIMARY KEY (option_id, datetime),
+                        PRIMARY KEY (option_id, datetime)
                     )''')
         
         cur.execute('''CREATE INDEX IF NOT EXISTS idx_option_prices_id_time ON option_prices (option_id, datetime)''')
@@ -120,5 +122,21 @@ class DataBase:
         print("Tables in database:")
         for row in res:
             print(row[0])
+        con.commit()
+        con.close()
+    
+    def delete_db(self):
+        self.connection.close()
+        os.remove('marketdata.db')
+        print("Database file removed.")
+
+    # Figure out a persistent schema migration
+    def update_schema(self, table, updated_schema):
+        con = self.connection
+        cur = con.cursor()
+        # Drop the existing table
+        cur.execute(f"DROP TABLE IF EXISTS {table}")
+        # Create the new table with the updated schema
+        cur.execute(updated_schema)
         con.commit()
         con.close()
