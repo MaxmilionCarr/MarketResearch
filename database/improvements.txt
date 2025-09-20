@@ -4,3 +4,4 @@
 4.) Ensure type checking using MyPy -> Ensures non wacky numbers or strings when pulling api data
 5.) Check unique constraints on schemas
 6.) Historical prices should be seperated into distinct time types (Daily data, Hourly Data, 5 Minute Data) -> Allows for testing of different timescale trading strategies (Issues come from cost / throttling might be a job for AWS with an automated autostart every maintaince shutoff)
+7.) Need to make all info retrievals dataclasses rather than tuple lists

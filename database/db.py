@@ -1,11 +1,21 @@
 from __future__ import annotations
 import sqlite3 as sql
-from core.exchanges import ExchangeRepository
-from core.markets import MarketRepository
+from .core.exchanges import ExchangeRepository
+from .core.markets import MarketRepository
 import os
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    raise ImportError("Please install python-dotenv to manage environment variables.")
+try:
+    load_dotenv()  # Load environment variables from a .env file
+    env_path = os.getenv("DATABASE_PATH")
+except Exception as e:
+    print("Not using environment variables, please configure your .env file.")
+    
 class DataBase:
-    def __init__(self, db_path='marketdata.db'):
+    def __init__(self, db_path=env_path):
         self.connection = sql.connect(db_path)
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.exchange_repo = ExchangeRepository(self.connection)
@@ -127,10 +137,14 @@ class DataBase:
     
     def delete_db(self):
         self.connection.close()
-        os.remove('marketdata.db')
-        print("Database file removed.")
+        if input("Are you sure you want to delete the database? This action cannot be undone. (y/n): ").lower() == 'y':
+            os.remove(env_path)
+            print("Database file removed.")
+        else:
+            print("Database deletion cancelled.")
 
     # Figure out a persistent schema migration
+    '''
     def update_schema(self, table, updated_schema):
         con = self.connection
         cur = con.cursor()
@@ -140,3 +154,4 @@ class DataBase:
         cur.execute(updated_schema)
         con.commit()
         con.close()
+    '''

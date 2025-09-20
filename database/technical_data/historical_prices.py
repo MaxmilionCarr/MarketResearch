@@ -1,7 +1,15 @@
 from __future__ import annotations
 import sqlite3 as sql
-from typing import Optional, List, Tuple, Any
+from typing import Optional, List, Tuple, Any, Literal
+from datetime import datetime
 
+periods = {
+        "5 Minutes",
+        "1 Hour",
+        "1 Day"
+    }
+
+# Need to include option to fetch different periods, (5 min, 1 hour, 1 day)
 class HistoricalPricesRepository:
     """
     Data-access layer for the `historical_prices` table.
@@ -15,7 +23,7 @@ class HistoricalPricesRepository:
         close REAL NOT NULL,
         volume INTEGER,
     """
-
+    
     def __init__(self, connection: sql.Connection):
         self.connection = connection
         # Ensure foreign key constraints are enforced
@@ -31,9 +39,9 @@ class HistoricalPricesRepository:
         cur.execute("SELECT * FROM historical_prices")
         return cur.fetchall()
     
-    def get_info(self, ticker_id: int, start_date: str, end_date: str | None = None) -> List[Tuple[Any, ...]]:
+    def fetch_daily(self, ticker_id: int, start_date: datetime, end_date: datetime | None = None) -> List[Tuple[Any, ...]]:
         """
-        Return all columns for a given ticker_id and date range.
+        Return all columns for a given ticker_id and datetime range with daily period.
         If end_date is None, return all data from start_date onwards.
         """
         cur = self.connection.cursor()
@@ -49,7 +57,110 @@ class HistoricalPricesRepository:
             )
         return cur.fetchall()
 
-    def get_close_prices(self, ticker_id: int, start_date: str, end_date: str | None = None) -> List[Tuple[str, float]]:
+    def fetch_hourly(self, ticker_id: int, start_date: datetime, end_date: datetime | None = None) -> List[Tuple[Any, ...]]:
+        """
+        Return all columns for a given ticker_id and datetime range with hourly period.
+        If end_date is None, return all data from start_date onwards.
+        """
+        cur = self.connection.cursor()
+        if end_date:
+            cur.execute(
+                """
+                SELECT ticker_id, 
+                       strftime('%Y-%m-%d %H:00:00', datetime) AS hour,
+                       FIRST_VALUE(open) OVER (PARTITION BY strftime('%Y-%m-%d %H', datetime) ORDER BY datetime) AS open,
+                       MAX(high) AS high,
+                       MIN(low) AS low,
+                       LAST_VALUE(close) OVER (PARTITION BY strftime('%Y-%m-%d %H', datetime) ORDER BY datetime ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS close,
+                       SUM(volume) AS volume
+                FROM historical_prices
+                WHERE ticker_id = ? AND datetime BETWEEN ? AND ?
+                GROUP BY hour
+                ORDER BY hour
+                """,
+                (ticker_id, start_date, end_date)
+            )
+        else:
+            cur.execute(
+                """
+                SELECT ticker_id, 
+                       strftime('%Y-%m-%d %H:00:00', datetime) AS hour,
+                       FIRST_VALUE(open) OVER (PARTITION BY strftime('%Y-%m-%d %H', datetime) ORDER BY datetime) AS open,
+                       MAX(high) AS high,
+                       MIN(low) AS low,
+                       LAST_VALUE(close) OVER (PARTITION BY strftime('%Y-%m-%d %H', datetime) ORDER BY datetime ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS close,
+                       SUM(volume) AS volume
+                FROM historical_prices
+                WHERE ticker_id = ? AND datetime >= ?
+                GROUP BY hour
+                ORDER BY hour
+                """,
+                (ticker_id, start_date)
+            )
+        return cur.fetchall()
+
+    def fetch_five_minute(self, ticker_id: int, start_date: datetime, end_date: datetime | None = None) -> List[Tuple[Any, ...]]:
+        """
+        Return all columns for a given ticker_id and datetime range with 5-minute period.
+        If end_date is None, return all data from start_date onwards.
+        """
+        cur = self.connection.cursor()
+        if end_date:
+            cur.execute(
+                """
+                SELECT ticker_id, 
+                       strftime('%Y-%m-%d %H:%M:00', datetime, '-' || (strftime('%M', datetime) % 5) || ' minutes') AS five_minute,
+                       FIRST_VALUE(open) OVER (PARTITION BY strftime('%Y-%m-%d %H:%M', datetime, '-' || (strftime('%M', datetime) % 5) || ' minutes') ORDER BY datetime) AS open,
+                       MAX(high) AS high,
+                       MIN(low) AS low,
+                       LAST_VALUE(close) OVER (PARTITION BY strftime('%Y-%m-%d %H:%M', datetime, '-' || (strftime('%M', datetime) % 5) || ' minutes') ORDER BY datetime ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS close,
+                       SUM(volume) AS volume
+                FROM historical_prices
+                WHERE ticker_id = ? AND datetime BETWEEN ? AND ?
+                GROUP BY five_minute
+                ORDER BY five_minute
+                """,
+                (ticker_id, start_date, end_date)
+            )
+        else:
+            cur.execute(
+                """
+                SELECT ticker_id, 
+                       strftime('%Y-%m-%d %H:%M:00', datetime, '-' || (strftime('%M', datetime) % 5) || ' minutes') AS five_minute,
+                       FIRST_VALUE(open) OVER (PARTITION BY strftime('%Y-%m-%d %H:%M', datetime, '-' || (strftime('%M', datetime) % 5) || ' minutes') ORDER BY datetime) AS open,
+                       MAX(high) AS high,
+                       MIN(low) AS low,
+                       LAST_VALUE(close) OVER (PARTITION BY strftime('%Y-%m-%d %H:%M', datetime, '-' || (strftime('%M', datetime) % 5) || ' minutes') ORDER BY datetime ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS close,
+                       SUM(volume) AS volume
+                FROM historical_prices
+                WHERE ticker_id = ? AND datetime >= ?
+                GROUP BY five_minute
+                ORDER BY five_minute
+                """,
+                (ticker_id, start_date)
+            )
+        return cur.fetchall()
+
+    def get_info(self, ticker_id: int, period: Literal["5 Minutes", "1 Hour", "1 Day"], start_date: datetime, end_date: datetime | None = None) -> List[Tuple[Any, ...]]:
+        """
+        Return all columns for a given ticker_id and datetime range with a specified period.
+        If end_date is None, return all data from start_date onwards.
+        """
+        if period not in periods:
+            raise ValueError("Period required")
+
+        match period:
+            case "1 Day":
+                return self.fetch_daily(ticker_id, start_date, end_date)
+            case "1 Hour":
+                return self.fetch_hourly(ticker_id, start_date, end_date)
+            case "5 Minutes":
+                return self.fetch_five_minute(ticker_id, start_date, end_date)
+            case _:
+                raise ValueError("Invalid period")
+
+    # Use fetch info and cut to get close prices rather than all info
+    def get_close_prices(self, ticker_id: int, start_date: datetime, end_date: datetime | None = None) -> List[Tuple[str, float]]:
         """
         Return list of (datetime, close) tuples for a given ticker_id and date range.
         If end_date is None, return all data from start_date onwards.
@@ -69,7 +180,7 @@ class HistoricalPricesRepository:
 
     # ---------- CREATE ----------
 
-    def create(self, ticker_id: int, datetime: str, close: float, *, open: float, high: float, low: float, volume: int) -> int:
+    def create(self, ticker_id: int, datetime: datetime, close: float, *, open: float, high: float, low: float, volume: int) -> int:
         """
         Insert a new row and return its primary key.
         Pass column=value pairs as kwargs.
@@ -103,7 +214,7 @@ class HistoricalPricesRepository:
 
     # ---------- UPDATE ----------
 
-    def update(self, ticker_id: int, datetime: float, *, open: float, high: float, low: float, close: float, volume: int) -> int:
+    def update(self, ticker_id: int, datetime: datetime, *, open: float, high: float, low: float, close: float, volume: int) -> int:
         """
         Update given columns for a row.
         Returns number of rows updated.
@@ -135,7 +246,7 @@ class HistoricalPricesRepository:
         self.connection.commit()
         return cur.rowcount
     
-    def delete_days(self, ticker_id: int, start_date: str, end_date: str) -> int:
+    def delete_days(self, ticker_id: int, start_date: datetime, end_date: datetime) -> int:
         """
         Delete rows for a given ticker_id and date range.
         Returns number of rows deleted.
@@ -153,3 +264,7 @@ class HistoricalPricesRepository:
         Delete ALL rows from this table.
         Returns number of rows deleted.
         """
+        cur = self.connection.cursor()
+        cur.execute("DELETE FROM historical_prices")
+        self.connection.commit()
+        return cur.rowcount

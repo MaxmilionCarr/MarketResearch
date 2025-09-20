@@ -1,4 +1,5 @@
 from ib_insync import *
+from datetime import datetime
 
 # Connect to TWS (7497 = paper, 7496 = live) TEST: 55000 FOR PAPER TRADING
 ib = IB()
@@ -20,7 +21,14 @@ bars = ib.reqHistoricalData(
 
 # Print summary
 print(f"Returned {len(bars)} daily bars")
+details = ib.reqContractDetails(spy)
+print(f"Trading on {details[0].contract.primaryExchange}")
 for b in bars[-5:]:
     print(b.date, b.open, b.high, b.low, b.close, b.volume)
+
+# Dates from IBKR are given as datetime YAY
+check = bars[-1].date
+print(type(check))
+print(isinstance(check, datetime))
 
 ib.disconnect()

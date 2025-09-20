@@ -1,6 +1,13 @@
 from __future__ import annotations
 import sqlite3 as sql
 from typing import Optional, List, Tuple
+from dataclasses import dataclass
+
+@dataclass
+class Exchange:
+    exchange_id: int
+    exchange_name: str
+    timezone: str
 
 class ExchangeRepository:
     """
@@ -36,9 +43,10 @@ class ExchangeRepository:
         """Return all exchanges as a list of (id, name, timezone)."""
         cur = self.connection.cursor()
         cur.execute("SELECT exchange_id, exchange_name, timezone FROM exchanges")
-        return cur.fetchall()
+        rows = cur.fetchall()
+        return [Exchange(*row) for row in rows]
 
-    def get_info(self, exchange_id: int) -> Optional[Tuple[int, str, str]]:
+    def get_info(self, exchange_id: int) -> Exchange | None:
         """Return a single exchange row or None if not found."""
         cur = self.connection.cursor()
         try:    
@@ -49,7 +57,8 @@ class ExchangeRepository:
         except sql.Error as e:
             print(f"SQL error: {e}")
             return None
-        return cur.fetchone()
+        row = cur.fetchone()
+        return Exchange(*row) if row else None
 
     # ---------- CREATE ----------
 
@@ -124,9 +133,7 @@ class ExchangeRepository:
 
     # ---------- DELETE ----------
 
-    def delete(
-        self, *, exchange_id: Optional[int] = None, exchange_name: Optional[str] = None
-    ) -> int:
+    def delete(self, *, exchange_id: Optional[int] = None, exchange_name: Optional[str] = None) -> int:
         """
         Delete an exchange by id or name.
         Returns number of rows deleted.
