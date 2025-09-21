@@ -44,7 +44,10 @@ class DataBase:
 
         cur.execute('''CREATE TABLE IF NOT EXISTS markets (
                         market_id INTEGER PRIMARY KEY,
-                        market_name TEXT NOT NULL
+                        exchange_id INTEGER NOT NULL,
+                        market_name TEXT NOT NULL,
+                        PRIMARY KEY (market_id, exchange_id),
+                        FOREIGN KEY (exchange_id) REFERENCES exchanges(exchange_id) ON DELETE CASCADE
                     )''')
         cur.execute('''CREATE INDEX IF NOT EXISTS idx_markets_name ON markets (market_name)''')
         
@@ -54,6 +57,7 @@ class DataBase:
                         market_id INTEGER NOT NULL,
                         exchange_id INTEGER NOT NULL,
                         currency TEXT NOT NULL,
+                        full_name TEXT,
                         description TEXT,
                         source TEXT NOT NULL,
                         UNIQUE(symbol, exchange_id),

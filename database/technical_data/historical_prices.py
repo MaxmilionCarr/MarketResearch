@@ -3,6 +3,8 @@ import sqlite3 as sql
 from typing import Optional, List, Tuple, Any, Literal
 from datetime import datetime
 
+# TODO: Fix up repository with data classes and better methods for fetching
+
 periods = {
         "5 Minutes",
         "1 Hour",

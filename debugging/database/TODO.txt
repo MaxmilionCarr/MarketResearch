@@ -1,0 +1,1 @@
+1.) Need to debug markets, tickers before moving onto historical prices (This is when i can start pulling from IBKR)

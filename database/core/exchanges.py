@@ -2,12 +2,30 @@ from __future__ import annotations
 import sqlite3 as sql
 from typing import Optional, List, Tuple
 from dataclasses import dataclass
+from .markets import MarketRepository, Market
+from instruments.tickers import TickerRepository, Ticker
 
 @dataclass
 class Exchange:
+    """
+    Data class representing an exchange.
+    """
     exchange_id: int
     exchange_name: str
     timezone: str
+    connection: sql.Connection
+
+    @property
+    def markets(self) -> List[Market]:
+        """Return all markets for this exchange."""
+        repo = MarketRepository(self.connection)
+        return repo.get_by_exchange(self.exchange_id)
+    
+    @property
+    def tickers(self) -> List[Ticker]:
+        """Return all tickers for this exchange."""
+        repo = TickerRepository(self.connection)
+        return repo.get_by_exchange(self.exchange_id)
 
 class ExchangeRepository:
     """
@@ -44,7 +62,7 @@ class ExchangeRepository:
         cur = self.connection.cursor()
         cur.execute("SELECT exchange_id, exchange_name, timezone FROM exchanges")
         rows = cur.fetchall()
-        return [Exchange(*row) for row in rows]
+        return [Exchange(*row, connection=self.connection) for row in rows]
 
     def get_info(self, exchange_id: int) -> Exchange | None:
         """Return a single exchange row or None if not found."""
@@ -58,7 +76,8 @@ class ExchangeRepository:
             print(f"SQL error: {e}")
             return None
         row = cur.fetchone()
-        return Exchange(*row) if row else None
+        return Exchange(*row, connection=self.connection) if row else None
+    
 
     # ---------- CREATE ----------
 

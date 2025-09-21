@@ -1,6 +1,46 @@
 from __future__ import annotations
 import sqlite3 as sql
 from typing import Optional, List, Tuple, Any
+from dataclasses import dataclass
+from core.markets import MarketRepository, Market
+from core.exchanges import ExchangeRepository, Exchange
+
+@dataclass
+class Ticker:
+    ticker_id: int
+    symbol: str
+    market_id: int
+    exchange_id: int
+    currency: str
+    full_name: str
+    description: str
+    source: str
+    connection: sql.Connection
+
+    @property
+    def market(self) -> Market | None:
+        """Return the market for this ticker."""
+        repo = MarketRepository(self.connection)
+        return repo.get_info(self.market_id, self.exchange_id)
+
+    @property
+    def exchange(self) -> Exchange | None:
+        """Return the exchange for this ticker."""
+        repo = ExchangeRepository(self.connection)
+        return repo.get_info(self.exchange_id)
+
+    @property
+    def equity_info(self) -> Equity | None:
+        """Return equity-specific info if this ticker is an equity."""
+        if self.market_id != 1:
+            print("Ticker is not an equity based on market_id.")
+            return None
+        repo = EquitiesRepository(self.connection)
+        return repo.get_info(ticker_id=self.ticker_id, symbol=self.symbol)
+    
+    # NEED BOND INFO LATER
+    
+
 
 # This is the primary table for all instruments
 class TickerRepository:
@@ -13,6 +53,7 @@ class TickerRepository:
         market_id INTEGER NOT NULL,
         exchange_id INTEGER NOT NULL,
         currency TEXT NOT NULL,
+        full_name TEXT,
         description TEXT,
         source TEXT NOT NULL,
         UNIQUE(symbol, exchange_id),
@@ -27,13 +68,14 @@ class TickerRepository:
     
     # ---------- READ ----------
 
-    def get_all(self):
-        """Return all tickers as a list of tuples."""
+    def get_all(self) -> List[Ticker]:
+        """Return all tickers as a list of Ticker objects."""
         cur = self.connection.cursor()
-        cur.execute("SELECT ticker_id, symbol, market_id, exchange_id, currency, description, source FROM tickers")
-        return cur.fetchall()
+        cur.execute("SELECT ticker_id, symbol, market_id, exchange_id, currency, full_name, description, source FROM tickers")
+        rows = cur.fetchall()
+        return [Ticker(*row, connection=self.connection) for row in rows]
 
-    def get_info(self, *, symbol: str | None = None, ticker_id: int | None = None) -> Optional[Tuple[Any, ...]]:
+    def get_info(self, *, symbol: str | None = None, ticker_id: int | None = None) -> Ticker | None:
         """
         Return a single row by primary key or None if not found.
         """
@@ -43,10 +85,12 @@ class TickerRepository:
         if ticker_id is not None:
             try:
                 cur.execute(
-                    f"SELECT ticker_id, symbol, market_id, exchange_id, currency, description, source FROM tickers WHERE ticker_id = ?",
+                    f"SELECT ticker_id, symbol, market_id, exchange_id, currency, full_name, description, source FROM tickers WHERE ticker_id = ?",
                     (ticker_id,),
                 )
-                return cur.fetchone()
+                row = cur.fetchone()
+                if row:
+                    return Ticker(*row, connection=self.connection)
             except sql.Error as e:
                 print(f"Error fetching ticker by ticker_id: {e}")
                 pass
@@ -54,59 +98,82 @@ class TickerRepository:
         if symbol is not None:
             try:
                 cur.execute(
-                    f"SELECT ticker_id, symbol, market_id, exchange_id, currency, description, source FROM tickers WHERE symbol = ?",
+                    f"SELECT ticker_id, symbol, market_id, exchange_id, currency, full_name, description, source FROM tickers WHERE symbol = ?",
                     (symbol,),
                 )
-                return cur.fetchone()
+                row = cur.fetchone()
+                if row:
+                    return Ticker(*row, connection=self.connection)
             except sql.Error as e:
                 print(f"Error fetching ticker by symbol: {e}")
                 pass
 
-        return -1
+        return None
+    
+    def get_by_market(self, market_id: int) -> List[Ticker]:
+        """Return all tickers for a given market_id."""
+        cur = self.connection.cursor()
+        cur.execute(
+            "SELECT ticker_id, symbol, market_id, exchange_id, currency, full_name, description, source FROM tickers WHERE market_id = ?",
+            (market_id,),
+        )
+        rows = cur.fetchall()
+        return [Ticker(*row, connection=self.connection) for row in rows]
+    
+    def get_by_exchange(self, exchange_id: int) -> List[Ticker]:
+        """Return all tickers for a given exchange_id."""
+        cur = self.connection.cursor()
+        cur.execute(
+            "SELECT ticker_id, symbol, market_id, exchange_id, currency, full_name, description, source FROM tickers WHERE exchange_id = ?",
+            (exchange_id,),
+        )
+        rows = cur.fetchall()
+        return [Ticker(*row, connection=self.connection) for row in rows]
+    
     # ---------- CREATE ----------
 
-    def create(self, symbol: str, market_id: int, exchange_id: int, currency: str, description: str, source: str) -> int:
+    def create(self, symbol: str, market_id: int, exchange_id: int, currency: str, full_name: str, description: str, source: str) -> int:
         """
         Insert a new ticker and return its ID.
         """
         cur = self.connection.cursor()
         cur.execute(
-            f"INSERT INTO tickers (symbol, market_id, exchange_id, currency, description, source) VALUES (?, ?, ?, ?, ?, ?)",
-            (symbol, market_id, exchange_id, currency, description, source),
+            f"INSERT INTO tickers (symbol, market_id, exchange_id, currency, full_name, description, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (symbol, market_id, exchange_id, currency, full_name, description, source),
         )
         self.connection.commit()
         return cur.lastrowid  
 
 
-    def get_or_create(self, symbol: str, market_id: int, exchange_id: int, currency: str, source: str, *, description: str | None = None) -> int:
+    def get_or_create(self, symbol: str, market_id: int, exchange_id: int, *, currency: str, source: str, full_name: str | None = None, description: str | None = None) -> int:
         """
         Return the ID of a row where unique_col == unique_val,
         or create it using defaults if it doesn't exist.
         """
         cur = self.connection.cursor()
         cur.execute(
-            f"SELECT ticker_id FROM tickers WHERE symbol = ? AND market_id = ? AND exchange_id = ? AND currency = ?",
-            (symbol, market_id, exchange_id, currency),
+            f"SELECT ticker_id FROM tickers WHERE symbol = ? AND market_id = ? AND exchange_id = ?",
+            (symbol, market_id, exchange_id),
         )
         row = cur.fetchone()
         if row:
             return row[0]
 
         cur.execute(
-            f"INSERT INTO tickers (symbol, market_id, exchange_id, currency, description, source) VALUES (?, ?, ?, ?, ?, ?)",
-            (symbol, market_id, exchange_id, currency, description or "", source),
+            f"INSERT INTO tickers (symbol, market_id, exchange_id, currency, full_name, description, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (symbol, market_id, exchange_id, currency, full_name or "", description or "", source),
         )
         self.connection.commit()
         return cur.lastrowid
 
     # ---------- UPDATE ----------
 
-    def update(self, ticker_id: str, *, symbol: str, market_id: int, exchange_id: int, currency: str, description: str | None = None, source: str | None = None) -> int:
+    def update(self, ticker_id: str, *, symbol: str, market_id: int, exchange_id: int, currency: str, full_name: str | None = None, description: str | None = None, source: str | None = None) -> int:
         """
         Update given columns for a row.
         Returns number of rows updated.
         """
-        if not (symbol or market_id or exchange_id or currency or description or source):
+        if not (symbol or market_id or exchange_id or currency or full_name or description or source):
             raise ValueError("Must provide at least one field to update")
         cur = self.connection.cursor()
         fields = []
@@ -123,6 +190,9 @@ class TickerRepository:
         if currency is not None:
             fields.append("currency = ?")
             values.append(currency)
+        if full_name is not None:
+            fields.append("full_name = ?")
+            values.append(full_name)
         if description is not None:
             fields.append("description = ?")
             values.append(description)
@@ -167,6 +237,18 @@ class TickerRepository:
 
 # These tables provide definitions on the data availability for 
 # Different market types
+@dataclass
+class Equity:
+    ticker_id: int
+    symbol: str
+    sector: str
+    industry: str
+    dividend_yield: float
+    pe_ratio: float
+    eps: float
+    beta: float
+    market_cap: float
+
 class EquitiesRepository:
     """
     Data-access layer for equities-related tables.
@@ -191,17 +273,18 @@ class EquitiesRepository:
     
     # ---------- READ ----------
 
-    def get_all(self) -> List[Tuple[Any, ...]]:
+    def get_all(self) -> List[Equity]:
         """
-        Return all rows as a list of tuples of all info in equities.
+        Return all rows as a list of Equity objects.
         """
         cur = self.connection.cursor()
         cur.execute(
             "SELECT ticker_id, symbol, sector, industry, dividend_yield, pe_ratio, eps, beta, market_cap FROM equities"
         )
-        return cur.fetchall()
+        rows = cur.fetchall()
+        return [Equity(*row) for row in rows]
 
-    def get_info(self, *, ticker_id: int, symbol: str) -> Optional[Tuple[Any, ...]]:
+    def get_info(self, *, ticker_id: int | None = None, symbol: str | None = None) -> Optional[Equity]:
         """
         Return a single row by primary key or None if not found.
         """
@@ -212,7 +295,8 @@ class EquitiesRepository:
                     "SELECT ticker_id, symbol, sector, industry, dividend_yield, pe_ratio, eps, beta, market_cap FROM equities WHERE ticker_id = ?",
                     (ticker_id,),
                 )
-                return cur.fetchone()
+                row = cur.fetchone()
+                return Equity(*row) if row else None
             except sql.Error as e:
                 print(f"Error fetching equity by ticker_id: {e}")
                 pass
@@ -222,12 +306,13 @@ class EquitiesRepository:
                     "SELECT ticker_id, symbol, sector, industry, dividend_yield, pe_ratio, eps, beta, market_cap FROM equities WHERE symbol = ?",
                     (symbol,),
                 )
-                return cur.fetchone()
+                row = cur.fetchone()
+                return Equity(*row) if row else None
             except sql.Error as e:
                 print(f"Error fetching equity by symbol: {e}")
                 pass
 
-        return -1
+        return None
 
     # ---------- CREATE ----------
 
@@ -254,13 +339,13 @@ class EquitiesRepository:
         
         if ticker_id is not None:
             info = self.get_info(ticker_id=ticker_id)
-            if info != -1:
-                return info[0]
+            if info:
+                return info.ticker_id
         if symbol is not None:
             info = self.get_info(symbol=symbol)
-            if info != -1:
-                return info[0]
-            
+            if info:
+                return info.ticker_id
+
         if ticker_id is not None and symbol is not None:
             cur.execute(
                 "INSERT INTO equities (ticker_id, symbol, sector, industry, dividend_yield, pe_ratio, eps, beta, market_cap) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -273,19 +358,15 @@ class EquitiesRepository:
     
     # ---------- UPDATE ----------
 
-    def update(self, *, ticker_id: int, symbol: str, sector: str, industry: str, dividend_yield: float, pe_ratio: float, eps: float, beta: float, market_cap: float) -> int:
+    def update(self, ticker_id: int, *, symbol: str | None = None, sector: str | None = None, industry: str | None = None, dividend_yield: float | None = None, pe_ratio: float | None = None, eps: float | None = None, beta: float | None = None, market_cap: float | None = None) -> int:
         """
         Update given columns for a row.
         Returns number of rows updated.
         """
-        if ticker_id is None and symbol is None:
-            raise ValueError("Must provide ticker_id or symbol")
+
         cur = self.connection.cursor()
         fields = []
         values = [] 
-        if ticker_id is not None:
-            fields.append("ticker_id = ?")
-            values.append(ticker_id)
         if symbol is not None:
             fields.append("symbol = ?")
             values.append(symbol)
@@ -311,16 +392,11 @@ class EquitiesRepository:
             fields.append("market_cap = ?")
             values.append(market_cap)
             
-        if ticker_id is not None:
-            cur.execute(
-                f"UPDATE equities SET {', '.join(fields)} WHERE ticker_id = ?",
-                tuple(values) + (ticker_id,),
-            )
-        elif symbol is not None:
-            cur.execute(
-                f"UPDATE equities SET {', '.join(fields)} WHERE symbol = ?",
-                tuple(values) + (symbol,),
-            )
+        cur.execute(
+            f"UPDATE equities SET {', '.join(fields)} WHERE ticker_id = ?",
+            tuple(values) + (ticker_id,),
+        )
+
         self.connection.commit()
         return cur.rowcount
 
@@ -328,7 +404,7 @@ class EquitiesRepository:
 
     def delete(self, *, ticker_id: int = None, symbol: str = None) -> int:
         """
-        Delete a row by primary key OR by custom filters.
+        Delete a row by primary key OR by symbol.
         Returns number of rows deleted.
         """
         cur = self.connection.cursor()
@@ -352,7 +428,7 @@ class EquitiesRepository:
         self.connection.commit()
         return cur.rowcount
 
-# Not needed atm, first test implementation of equities
+# TODO: Implement Bonds Repository later once equities checks out
 class BondsRepository:
     """
     Data-access layer for bonds-related tables.

@@ -6,9 +6,11 @@ import sqlite3 as sql
 import os
 import time
 from dotenv import load_dotenv
+import argparse
 
 load_dotenv()
 test_env_path = os.getenv("TESTING_DATABASE_PATH")
+  
 
 # --- Database Tests ---
 
@@ -122,5 +124,26 @@ def test_exchanges(path = test_env_path):
 # --- Market Tests ---
 
 
+# --- Main ---
+def main():
+    parser = argparse.ArgumentParser(description="Run database tests.")
+    parser.add_argument('--test', type=str, choices=['all', 'database', 'exchanges', 'markets'], default='all',
+                        help="Specify which tests to run: 'all', 'exchanges', or 'markets'. Default is 'all'.")
+    args = parser.parse_args()
+
+    test_map = {
+        'all': [test_database_create, test_exchanges],
+        'database': [test_database_create],
+        'exchanges': [test_exchanges],
+        # 'markets': [test_markets],  # Uncomment when market tests are implemented
+    }
+
+    tests_to_run = test_map.get(args.test, [])
+    for test in tests_to_run:
+        print(f"Running {test.__name__}...")
+        test()
+        print(f"Finished {test.__name__}.\n")
+
+
 if __name__ == "__main__":
-    test_exchanges()
+    main()

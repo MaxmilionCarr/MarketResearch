@@ -1,6 +1,40 @@
 from __future__ import annotations
 import sqlite3 as sql
 from typing import Optional, List, Tuple
+from dataclasses import dataclass
+from .exchanges import Exchange, ExchangeRepository
+from instruments.tickers import Ticker, TickerRepository
+from enum import IntEnum
+
+class MarketType(IntEnum):
+    EQUITIES = 1
+    BONDS = 2
+
+'''
+Market ID's:
+1 = Equity (Stocks)
+2 = Bonds (Fixed Income)
+'''
+
+# TODO: Wonder if I can reduce overhead through the creation of 1 database connection and caching for multiple query runs
+@dataclass
+class Market:
+    market_id: int
+    exchange_id: int
+    market_name: str
+    connection: sql.Connection
+
+    @property
+    def exchange(self) -> Exchange:
+        """Return the exchange for this market."""
+        repo = ExchangeRepository(self.connection)
+        return repo.get_info(self.exchange_id)
+
+    @property
+    def tickers(self) -> List[Ticker]:
+        """Return all tickers for this market."""
+        repo = TickerRepository(self.connection)
+        return repo.get_by_market(self.market_id)
 
 class MarketRepository:
     """
@@ -8,6 +42,7 @@ class MarketRepository:
 
     Schema:
         market_id INTEGER PRIMARY KEY,
+        exchange_id INTEGER NOT NULL,
         market_name TEXT NOT NULL
     
     """
@@ -19,107 +54,109 @@ class MarketRepository:
     
     # ---------- READ ----------
 
-    def get_all(self) -> List[Tuple[int, str, str]]:
-        """Return all markets as a list of (id, name, timezone)."""
+    def get_all(self) -> List[Market]:
+        """Return all markets as a list of Market objects."""
         cur = self.connection.cursor()
-        cur.execute("SELECT market_id, market_name FROM markets")
-        return cur.fetchall()
+        cur.execute("SELECT market_id, exchange_id, market_name FROM markets")
+        rows = cur.fetchall()
+        return [Market(*row, connection=self.connection) for row in rows]
 
-    def get_info(self, market_id: int) -> Optional[Tuple[int, str, str]]:
-        """Return a single market row or None if not found."""
+    def get_by_exchange(self, exchange_id: int) -> List[Market]:
+        """
+        Get all markets for a specific exchange by ID.
+        """
+        if exchange_id is None:
+            raise ValueError("Provide exchange_id")
+
         cur = self.connection.cursor()
-        try:    
+        cur.execute("SELECT market_id, exchange_id, market_name FROM markets WHERE exchange_id = ?", (exchange_id,))
+        return [Market(*row, connection=self.connection) for row in cur.fetchall()]
+
+    def get_info(self, market_id: int, exchange_id: int) -> Market | None:
+        """
+        Get a single market by market_id and exchange_id.
+        Returns None if not found.
+        """
+        if (market_id is None) or (exchange_id is None):
+            raise ValueError("Provide both market_id and exchange_id")
+        try:
+            market_type = MarketType(market_id)
+        except ValueError:
+            raise ValueError("Invalid market_id")
+        cur = self.connection.cursor()
+        try:
             cur.execute(
-                "SELECT market_id, market_name FROM markets WHERE market_id = ?",
-                (market_id,),
+                "SELECT market_id, exchange_id, market_name FROM markets WHERE market_id = ? AND exchange_id = ?",
+                (market_type.value, exchange_id),
             )
         except sql.Error as e:
             print(f"SQL error: {e}")
             return None
-        return cur.fetchone()
+        row = cur.fetchone()
+        return Market(*row, connection=self.connection) if row else None
 
     # ---------- CREATE ----------
 
-    def create(self, market_name: str) -> int:
+    def create(self, market_id: int, exchange_id: int) -> int:
         """Insert a new market and return its ID."""
-        if not market_name:
-            raise ValueError("market_name must be provided")
+        if market_id is None or exchange_id is None:
+            raise ValueError("market_id and exchange_id must be provided")
+        try:
+            market_type = MarketType(market_id)
+        except ValueError:
+            raise ValueError("Invalid market_id")
+        
         cur = self.connection.cursor()
         cur.execute(
-            "INSERT INTO markets (market_name) VALUES (?)",
-            (market_name,),
+            "INSERT INTO markets (market_id, exchange_id, market_name) VALUES (?, ?, ?)",
+            (market_type.value, exchange_id, market_type.name),
         )
         self.connection.commit()
         return cur.lastrowid
 
-    def get_or_create(self, market_name: str) -> int:
+    def get_or_create(self, market_id: int, exchange_id: int) -> int:
         """
         Return the ID of an existing market with this name,
         or create it if it doesn't exist.
         """
-        if not market_name:
-            raise ValueError("market_name must be provided")
+        if not market_id or not exchange_id:
+            raise ValueError("market_id and exchange_id must be provided")
+        try:
+            market_type = MarketType(market_id)
+        except ValueError:
+            raise ValueError("Invalid market_id")
+        
         cur = self.connection.cursor()
         cur.execute(
-            "SELECT market_id FROM markets WHERE market_name = ?",
-            (market_name,),
+            "SELECT market_id, exchange_id FROM markets WHERE market_id = ? AND exchange_id = ?",
+            (market_id, exchange_id),
         )
         row = cur.fetchone()
         if row:
             return row[0]
 
         cur.execute(
-            "INSERT INTO markets (market_name) VALUES (?)",
-            (market_name,),
+            "INSERT INTO markets (market_id, exchange_id, market_name) VALUES (?, ?, ?)",
+            (market_type.value, exchange_id, market_type.name),
         )
         self.connection.commit()
         return cur.lastrowid
 
     # ---------- UPDATE ----------
 
-    def update(
-        self,
-        market_id: int,
-        *,
-        market_name: Optional[str] = None
-    ) -> int:
-        """
-        Update name for a market.
-        Returns number of rows updated (0 if nothing matched).
-        """
-        if market_name is None:
-            raise ValueError("Must provide at least one field to update")
-
-        fields, values = [], []
-        if market_name:
-            fields.append("market_name = ?")
-            values.append(market_name)
-
-        values.append(market_id)
-        sql_query = f"UPDATE markets SET {', '.join(fields)} WHERE market_id = ?"
-        cur = self.connection.cursor()
-        cur.execute(sql_query, tuple(values))
-        self.connection.commit()
-        return cur.rowcount
-
-    # ---------- DELETE ----------
-
-    def delete(
-        self, *, market_id: Optional[int] = None, market_name: Optional[str] = None
-    ) -> int:
+    def delete(self, market_id: int, exchange_id: int) -> int:
         """
         Delete a market by id or name.
         Returns number of rows deleted.
         """
-        if (market_id is None) == (market_name is None):
-            raise ValueError("Provide exactly one of market_id or market_name")
+        if (market_id is None) or (exchange_id is None):
+            raise ValueError("Provide both market_id and exchange_id")
 
         cur = self.connection.cursor()
-        if market_id is not None:
-            cur.execute("DELETE FROM markets WHERE market_id = ?", (market_id,))
-        else:
-            cur.execute("DELETE FROM markets WHERE market_name = ?", (market_name,))
-
+        cur.execute(
+            "DELETE FROM markets WHERE market_id = ? AND exchange_id = ?",
+            (market_id, exchange_id),
+        )
         self.connection.commit()
         return 1
 
