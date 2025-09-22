@@ -2,8 +2,9 @@ from __future__ import annotations
 import sqlite3 as sql
 from typing import Optional, List, Tuple, Any
 from dataclasses import dataclass
-from core.markets import MarketRepository, Market
-from core.exchanges import ExchangeRepository, Exchange
+from functools import cached_property
+
+
 
 @dataclass
 class Ticker:
@@ -17,19 +18,21 @@ class Ticker:
     source: str
     connection: sql.Connection
 
-    @property
-    def market(self) -> Market | None:
+    @cached_property
+    def market(self):
         """Return the market for this ticker."""
+        from core.markets import MarketRepository, Market
         repo = MarketRepository(self.connection)
         return repo.get_info(self.market_id, self.exchange_id)
 
-    @property
-    def exchange(self) -> Exchange | None:
+    @cached_property
+    def exchange(self):
         """Return the exchange for this ticker."""
+        from core.exchanges import ExchangeRepository, Exchange
         repo = ExchangeRepository(self.connection)
         return repo.get_info(self.exchange_id)
 
-    @property
+    @cached_property
     def equity_info(self) -> Equity | None:
         """Return equity-specific info if this ticker is an equity."""
         if self.market_id != 1:
@@ -448,4 +451,3 @@ class BondsRepository:
         self.connection = connection
         # Ensure foreign key constraints are enforced
         self.connection.execute("PRAGMA foreign_keys = ON")
-    

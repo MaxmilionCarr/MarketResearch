@@ -13,9 +13,10 @@ try:
     env_path = os.getenv("DATABASE_PATH")
 except Exception as e:
     print("Not using environment variables, please configure your .env file.")
-    
+
 class DataBase:
     def __init__(self, db_path=env_path):
+        self.path = db_path
         self.connection = sql.connect(db_path)
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.exchange_repo = ExchangeRepository(self.connection)
@@ -43,7 +44,7 @@ class DataBase:
         cur.execute('''CREATE INDEX IF NOT EXISTS idx_exchanges_name ON exchanges (exchange_name)''')
 
         cur.execute('''CREATE TABLE IF NOT EXISTS markets (
-                        market_id INTEGER PRIMARY KEY,
+                        market_id INTEGER NOT NULL,
                         exchange_id INTEGER NOT NULL,
                         market_name TEXT NOT NULL,
                         PRIMARY KEY (market_id, exchange_id),
@@ -61,8 +62,7 @@ class DataBase:
                         description TEXT,
                         source TEXT NOT NULL,
                         UNIQUE(symbol, exchange_id),
-                        FOREIGN KEY (market_id) REFERENCES markets(market_id) ON DELETE CASCADE,
-                        FOREIGN KEY (exchange_id) REFERENCES exchanges(exchange_id) ON DELETE CASCADE
+                        FOREIGN KEY (market_id, exchange_id) REFERENCES markets(market_id, exchange_id) ON DELETE CASCADE
                     )''')
         
         # --- Market Specific Tables ---
@@ -142,7 +142,7 @@ class DataBase:
     def delete_db(self):
         self.connection.close()
         if input("Are you sure you want to delete the database? This action cannot be undone. (y/n): ").lower() == 'y':
-            os.remove(env_path)
+            os.remove(self.path)
             print("Database file removed.")
         else:
             print("Database deletion cancelled.")

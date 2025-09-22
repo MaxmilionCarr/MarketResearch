@@ -2,8 +2,8 @@ from __future__ import annotations
 import sqlite3 as sql
 from typing import Optional, List, Tuple
 from dataclasses import dataclass
-from .markets import MarketRepository, Market
-from instruments.tickers import TickerRepository, Ticker
+from functools import cached_property
+
 
 @dataclass
 class Exchange:
@@ -15,15 +15,17 @@ class Exchange:
     timezone: str
     connection: sql.Connection
 
-    @property
-    def markets(self) -> List[Market]:
+    @cached_property
+    def markets(self):
         """Return all markets for this exchange."""
+        from .markets import MarketRepository
         repo = MarketRepository(self.connection)
         return repo.get_by_exchange(self.exchange_id)
-    
-    @property
-    def tickers(self) -> List[Ticker]:
+
+    @cached_property
+    def tickers(self):
         """Return all tickers for this exchange."""
+        from instruments.tickers import TickerRepository
         repo = TickerRepository(self.connection)
         return repo.get_by_exchange(self.exchange_id)
 

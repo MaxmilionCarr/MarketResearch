@@ -2,8 +2,7 @@ from __future__ import annotations
 import sqlite3 as sql
 from typing import Optional, List, Tuple
 from dataclasses import dataclass
-from .exchanges import Exchange, ExchangeRepository
-from instruments.tickers import Ticker, TickerRepository
+from functools import cached_property
 from enum import IntEnum
 
 class MarketType(IntEnum):
@@ -24,15 +23,17 @@ class Market:
     market_name: str
     connection: sql.Connection
 
-    @property
-    def exchange(self) -> Exchange:
+    @cached_property
+    def exchange(self):
         """Return the exchange for this market."""
+        from .exchanges import ExchangeRepository
         repo = ExchangeRepository(self.connection)
         return repo.get_info(self.exchange_id)
 
-    @property
-    def tickers(self) -> List[Ticker]:
+    @cached_property
+    def tickers(self):
         """Return all tickers for this market."""
+        from instruments.tickers import TickerRepository
         repo = TickerRepository(self.connection)
         return repo.get_by_market(self.market_id)
 
@@ -94,7 +95,7 @@ class MarketRepository:
             return None
         row = cur.fetchone()
         return Market(*row, connection=self.connection) if row else None
-
+    
     # ---------- CREATE ----------
 
     def create(self, market_id: int, exchange_id: int) -> int:

@@ -5,3 +5,6 @@
 5.) Check unique constraints on schemas
 6.) Historical prices should be seperated into distinct time types (Daily data, Hourly Data, 5 Minute Data) -> Allows for testing of different timescale trading strategies (Issues come from cost / throttling might be a job for AWS with an automated autostart every maintaince shutoff)
 7.) Need to make all info retrievals dataclasses rather than tuple lists
+8.) Need to make other repository data accessible to different repos
+9.) Reduce overhead of creating new repo connections everytime data is called for in the data classes
+10.) REALLY NEED TO CLEAN THIS PART UP IT LOOKS LIKE SHIT
