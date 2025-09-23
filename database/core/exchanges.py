@@ -10,24 +10,27 @@ class Exchange:
     """
     Data class representing an exchange.
     """
-    exchange_id: int
-    exchange_name: str
+    
+    # Data Fields
+    id: int
+    name: str
     timezone: str
     connection: sql.Connection
 
+    # Ladder Down Properties
     @cached_property
     def markets(self):
         """Return all markets for this exchange."""
         from .markets import MarketRepository
         repo = MarketRepository(self.connection)
-        return repo.get_by_exchange(self.exchange_id)
+        return repo.get_by_exchange(self.id)
 
     @cached_property
     def tickers(self):
         """Return all tickers for this exchange."""
         from instruments.tickers import TickerRepository
         repo = TickerRepository(self.connection)
-        return repo.get_by_exchange(self.exchange_id)
+        return repo.get_by_exchange(self.id)
 
 class ExchangeRepository:
     """
@@ -66,13 +69,13 @@ class ExchangeRepository:
         rows = cur.fetchall()
         return [Exchange(*row, connection=self.connection) for row in rows]
 
-    def get_info(self, exchange_id: int) -> Exchange | None:
+    def get_info(self, exchange_id: int | None = None, exchange_name: str | None = None) -> Exchange | None:
         """Return a single exchange row or None if not found."""
         cur = self.connection.cursor()
         try:    
             cur.execute(
-                "SELECT exchange_id, exchange_name, timezone FROM exchanges WHERE exchange_id = ?",
-                (exchange_id,),
+                "SELECT exchange_id, exchange_name, timezone FROM exchanges WHERE exchange_id = ? OR exchange_name = ?",
+                (exchange_id, exchange_name),
             )
         except sql.Error as e:
             print(f"SQL error: {e}")

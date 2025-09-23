@@ -2,6 +2,8 @@ from __future__ import annotations
 import sqlite3 as sql
 from typing import Optional, List, Tuple, Any, Literal
 from datetime import datetime
+from dataclasses import dataclass
+from functools import cached_property
 
 # TODO: Fix up repository with data classes and better methods for fetching
 
@@ -10,6 +12,21 @@ periods = {
         "1 Hour",
         "1 Day"
     }
+
+@dataclass
+class HistoricalPrices:
+    ticker_id: int
+    datetime: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    connection: sql.Connection
+
+    
+
+
 
 # Need to include option to fetch different periods, (5 min, 1 hour, 1 day)
 class HistoricalPricesRepository:

@@ -2,6 +2,7 @@ from __future__ import annotations
 import sqlite3 as sql
 from .core.exchanges import ExchangeRepository
 from .core.markets import MarketRepository
+from .instruments.tickers import TickerRepository, EquitiesRepository
 import os
 
 try:
@@ -21,6 +22,8 @@ class DataBase:
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.exchange_repo = ExchangeRepository(self.connection)
         self.market_repo = MarketRepository(self.connection)
+        self.ticker_repo = TickerRepository(self.connection)
+        self.equity_repo = EquitiesRepository(self.connection)
 
     def close(self):
         self.connection.close()
@@ -146,6 +149,9 @@ class DataBase:
             print("Database file removed.")
         else:
             print("Database deletion cancelled.")
+    
+    def close_db(self):
+        self.connection.close()
 
     # Figure out a persistent schema migration
     '''

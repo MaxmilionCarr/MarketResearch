@@ -8,21 +8,19 @@ from enum import IntEnum
 class MarketType(IntEnum):
     EQUITIES = 1
     BONDS = 2
+    # NEED MORE IN FUTURE
 
-'''
-Market ID's:
-1 = Equity (Stocks)
-2 = Bonds (Fixed Income)
-'''
-
-# TODO: Wonder if I can reduce overhead through the creation of 1 database connection and caching for multiple query runs
+# TODO: Wonder if I can reduce overhead through the creation of 1 database connection and caching for multiple query runs: FIXED???
 @dataclass
 class Market:
-    market_id: int
+
+    # Data Fields
+    id: int
     exchange_id: int
-    market_name: str
+    name: str
     connection: sql.Connection
 
+    # Ladder Up Properties
     @cached_property
     def exchange(self):
         """Return the exchange for this market."""
@@ -30,12 +28,13 @@ class Market:
         repo = ExchangeRepository(self.connection)
         return repo.get_info(self.exchange_id)
 
+    # Ladder Down Properties
     @cached_property
     def tickers(self):
         """Return all tickers for this market."""
         from instruments.tickers import TickerRepository
         repo = TickerRepository(self.connection)
-        return repo.get_by_market(self.market_id)
+        return repo.get_by_market(self.id)
 
 class MarketRepository:
     """
@@ -61,18 +60,8 @@ class MarketRepository:
         cur.execute("SELECT market_id, exchange_id, market_name FROM markets")
         rows = cur.fetchall()
         return [Market(*row, connection=self.connection) for row in rows]
-
-    def get_by_exchange(self, exchange_id: int) -> List[Market]:
-        """
-        Get all markets for a specific exchange by ID.
-        """
-        if exchange_id is None:
-            raise ValueError("Provide exchange_id")
-
-        cur = self.connection.cursor()
-        cur.execute("SELECT market_id, exchange_id, market_name FROM markets WHERE exchange_id = ?", (exchange_id,))
-        return [Market(*row, connection=self.connection) for row in cur.fetchall()]
-
+    
+    # Maybe make this able to fetch based on name too???
     def get_info(self, market_id: int, exchange_id: int) -> Market | None:
         """
         Get a single market by market_id and exchange_id.
@@ -95,7 +84,18 @@ class MarketRepository:
             return None
         row = cur.fetchone()
         return Market(*row, connection=self.connection) if row else None
-    
+
+    def get_by_exchange(self, exchange_id: int) -> List[Market]:
+        """
+        Get all markets for a specific exchange by ID.
+        """
+        if exchange_id is None:
+            raise ValueError("Provide exchange_id")
+
+        cur = self.connection.cursor()
+        cur.execute("SELECT market_id, exchange_id, market_name FROM markets WHERE exchange_id = ?", (exchange_id,))
+        return [Market(*row, connection=self.connection) for row in cur.fetchall()]
+
     # ---------- CREATE ----------
 
     def create(self, market_id: int, exchange_id: int) -> int:

@@ -4,11 +4,9 @@ from typing import Optional, List, Tuple, Any
 from dataclasses import dataclass
 from functools import cached_property
 
-
-
 @dataclass
 class Ticker:
-    ticker_id: int
+    id: int
     symbol: str
     market_id: int
     exchange_id: int
@@ -21,14 +19,14 @@ class Ticker:
     @cached_property
     def market(self):
         """Return the market for this ticker."""
-        from core.markets import MarketRepository, Market
+        from database.core.markets import MarketRepository
         repo = MarketRepository(self.connection)
         return repo.get_info(self.market_id, self.exchange_id)
 
     @cached_property
     def exchange(self):
         """Return the exchange for this ticker."""
-        from core.exchanges import ExchangeRepository, Exchange
+        from database.core.exchanges import ExchangeRepository
         repo = ExchangeRepository(self.connection)
         return repo.get_info(self.exchange_id)
 
@@ -39,12 +37,10 @@ class Ticker:
             print("Ticker is not an equity based on market_id.")
             return None
         repo = EquitiesRepository(self.connection)
-        return repo.get_info(ticker_id=self.ticker_id, symbol=self.symbol)
-    
+        return repo.get_info(ticker_id=self.id, symbol=self.symbol)
+
     # NEED BOND INFO LATER
     
-
-
 # This is the primary table for all instruments
 class TickerRepository:
     """
@@ -78,6 +74,7 @@ class TickerRepository:
         rows = cur.fetchall()
         return [Ticker(*row, connection=self.connection) for row in rows]
 
+    # Can reduce the size of this (NEED TO)
     def get_info(self, *, symbol: str | None = None, ticker_id: int | None = None) -> Ticker | None:
         """
         Return a single row by primary key or None if not found.
@@ -135,7 +132,7 @@ class TickerRepository:
     
     # ---------- CREATE ----------
 
-    def create(self, symbol: str, market_id: int, exchange_id: int, currency: str, full_name: str, description: str, source: str) -> int:
+    def create(self, symbol: str, market_id: int, exchange_id: int, *, currency: str, full_name: str | None = None, description: str | None = None, source: str) -> int:
         """
         Insert a new ticker and return its ID.
         """
@@ -145,10 +142,13 @@ class TickerRepository:
             (symbol, market_id, exchange_id, currency, full_name, description, source),
         )
         self.connection.commit()
+
+        # NEEDS TO BE BASED ON WHAT MARKET ID IS
+
         return cur.lastrowid  
 
 
-    def get_or_create(self, symbol: str, market_id: int, exchange_id: int, *, currency: str, source: str, full_name: str | None = None, description: str | None = None) -> int:
+    def get_or_create(self, symbol: str, market_id: int, exchange_id: int, *, currency: str, full_name: str | None = None, description: str | None = None, source: str) -> int:
         """
         Return the ID of a row where unique_col == unique_val,
         or create it using defaults if it doesn't exist.
@@ -171,7 +171,7 @@ class TickerRepository:
 
     # ---------- UPDATE ----------
 
-    def update(self, ticker_id: str, *, symbol: str, market_id: int, exchange_id: int, currency: str, full_name: str | None = None, description: str | None = None, source: str | None = None) -> int:
+    def update(self, ticker_id: str, *, symbol: str | None = None, market_id: int | None = None, exchange_id: int | None = None, currency: str | None = None, full_name: str | None = None, description: str | None = None, source: str | None = None) -> int:
         """
         Update given columns for a row.
         Returns number of rows updated.
@@ -240,6 +240,7 @@ class TickerRepository:
 
 # These tables provide definitions on the data availability for 
 # Different market types
+# NEEDS TO BE POPULATED ON TICKER CREATION BASED ON MARKET TYPE
 @dataclass
 class Equity:
     ticker_id: int
@@ -319,7 +320,7 @@ class EquitiesRepository:
 
     # ---------- CREATE ----------
 
-    def create(self, ticker_id: int, symbol: str, sector: str, industry: str, dividend_yield: float, pe_ratio: float, eps: float, beta: float, market_cap: float) -> int:
+    def create(self, ticker_id: int, symbol: str, *, sector: str | None = None, industry: str | None = None, dividend_yield: float | None = None, pe_ratio: float | None = None, eps: float | None = None, beta: float | None = None, market_cap: float | None = None) -> int:
         """
         Insert a new row and return its primary key.
         """
@@ -331,7 +332,7 @@ class EquitiesRepository:
         self.connection.commit()
         return cur.lastrowid
 
-    def get_or_create(self, *, ticker_id: int, symbol: str, sector: str, industry: str, dividend_yield: float, pe_ratio: float, eps: float, beta: float, market_cap: float) -> int:
+    def get_or_create(self, ticker_id: int, symbol: str, *, sector: str | None = None, industry: str | None = None, dividend_yield: float | None = None, pe_ratio: float | None = None, eps: float | None = None, beta: float | None = None, market_cap: float | None = None) -> int:
         """
         Return the ID of a row where unique_col == unique_val,
         or create it using defaults if it doesn't exist.
